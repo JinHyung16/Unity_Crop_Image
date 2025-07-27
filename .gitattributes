@@ -1,0 +1,55 @@
+# ========================================
+# Unity 프로젝트용 .gitattributes 예시
+# ========================================
+
+# ---- 텍스트 파일: LF로 고정 ----
+*.cs         text eol=lf
+*.shader     text eol=lf
+*.cginc      text eol=lf
+*.hlsl       text eol=lf
+*.txt        text eol=lf
+*.md         text eol=lf
+*.json       text eol=lf
+*.xml        text eol=lf
+*.yml        text eol=lf
+*.asmdef     text eol=lf
+*.rsp        text eol=lf
+*.ts         text eol=lf
+*.js         text eol=lf
+
+# ---- Unity 메타/설정 파일: LF 유지 ----
+*.meta       text eol=lf
+*.unity      text eol=lf
+*.prefab     text eol=lf
+*.mat        text eol=lf
+*.anim       text eol=lf
+*.controller text eol=lf
+*.asset      text eol=lf
+
+# ---- 바이너리 파일: 변환 방지 ----
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.psd        binary
+*.fbx        binary
+*.mp3        binary
+*.ogg        binary
+*.wav        binary
+*.dll        binary
+*.exe        binary
+*.so         binary
+*.a          binary
+*.tga        binary
+*.dds        binary
+*.ttf        binary
+*.otf        binary
+*.mp4        binary
+*.mov        binary
+*.webm       binary
+
+# ---- Unity Scene 파일도 텍스트로 취급 ----
+*.unity      text eol=lf
+
+# ---- 기타 ----
+*.bat        text eol=crlf
+*.sh         text eol=lf
