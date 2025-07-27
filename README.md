@@ -4,10 +4,10 @@
 Based on UnityImageCropper by yasirkula
 License: MIT
 
-##📱 Unity Image Cropper (Customized)  
+## 📱 Unity Image Cropper (Customized)  
 A customized image cropping feature for Unity, built on top of UnityImageCropper by yasirkula, optimized for landscape UI and real device resolution.  
 
-##✨ Features  
+## ✨ Features  
 📷 Integrates with Native Gallery to load images from the user's device  
 🔄 Removed image rotation feature for simplified UX  
 🎯 Automatically scales the selected image to fit landscape screen resolution  
