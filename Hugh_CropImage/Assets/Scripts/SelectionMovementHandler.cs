@@ -3,20 +3,20 @@ using UnityEngine.EventSystems;
 
 namespace HughGame.UI.NCrop
 {
-	public class SelectionMovementHandler 
+    public class SelectionMovementHandler
         : MonoBehaviour
         , IBeginDragHandler
         , IDragHandler
         , IEndDragHandler
         , ISelectHandler
-	{
-		const float SCROLL_DISTANCE = 5f;
+    {
+        const float SCROLL_DISTANCE = 5f;
 
-		RectTransform _selectRectTrans;
+        RectTransform _selectRectTrans;
 
-		Vector2 _initialPosition;
-		Vector2 _initialTouchPosition;
-        
+        Vector2 _initialPosition;
+        Vector2 _initialTouchPosition;
+
         int _draggingPointer;
 
         CropWindow _window;
@@ -28,13 +28,14 @@ namespace HughGame.UI.NCrop
         }
 
         public void StopModifySelectionWith()
-		{
-            _window.StopModifySelectionWith(this);
-		}
+        {
+            if (_window != null)
+                _window.StopModifySelectionWith(this);
+        }
 
 
-		public void OnBeginDrag( PointerEventData eventData )
-		{
+        public void OnBeginDrag(PointerEventData eventData)
+        {
             if (_window == null)
                 return;
 
@@ -44,13 +45,13 @@ namespace HughGame.UI.NCrop
                 return;
             }
 
-			_draggingPointer = eventData.pointerId;
+            _draggingPointer = eventData.pointerId;
 
-			_initialPosition = _selectRectTrans.anchoredPosition;
+            _initialPosition = _selectRectTrans.anchoredPosition;
             _initialTouchPosition = _window.GetTouchPosition(eventData.pressPosition, eventData.pressEventCamera);
-		}
+        }
 
-		public void OnDrag( PointerEventData eventData )
+        public void OnDrag(PointerEventData eventData)
         {
             if (_window == null)
                 return;
@@ -62,31 +63,31 @@ namespace HughGame.UI.NCrop
             }
 
             _window.UpdateSelection(_initialPosition + _window.GetTouchPosition(eventData.position, eventData.pressEventCamera) - _initialTouchPosition);
-		}
+        }
 
-		public void OnEndDrag( PointerEventData eventData )
+        public void OnEndDrag(PointerEventData eventData)
         {
             if (_window == null)
                 return;
 
             if (eventData.pointerId == _draggingPointer)
                 _window.StopModifySelectionWith(this);
-		}
+        }
 
-		public void OnUpdate()
+        public void OnUpdate()
         {
             if (_window == null)
                 return;
 
             bool shouldUpdateViewport = false;
-			float scale = _window.ImageHolder.localScale.z;
+            float scale = _window.ImageHolder.localScale.z;
 
-			Vector2 imagePosition = _window.ImageHolder.anchoredPosition;
-			Vector2 selectionBottomLeft = imagePosition + _selectRectTrans.anchoredPosition * scale;
-			Vector2 selectionTopRight = selectionBottomLeft + _selectRectTrans.sizeDelta * scale;
-			Vector2 selectionSize = selectionTopRight - selectionBottomLeft;
+            Vector2 imagePosition = _window.ImageHolder.anchoredPosition;
+            Vector2 selectionBottomLeft = imagePosition + _selectRectTrans.anchoredPosition * scale;
+            Vector2 selectionTopRight = selectionBottomLeft + _selectRectTrans.sizeDelta * scale;
+            Vector2 selectionSize = selectionTopRight - selectionBottomLeft;
 
-			Vector2 viewportSize = _window.ViewportSize;
+            Vector2 viewportSize = _window.ViewportSize;
 
             if (selectionBottomLeft.x <= SCROLL_DISTANCE)
             {
@@ -123,11 +124,11 @@ namespace HughGame.UI.NCrop
                 _window.ImageHolder.anchoredPosition = imagePosition;
                 _window.UpdateSelection((selectionBottomLeft - imagePosition) / scale);
             }
-		}
+        }
 
-		public void Stop()
-		{
-			_draggingPointer--;
-		}
-	}
+        public void Stop()
+        {
+            _draggingPointer--;
+        }
+    }
 }

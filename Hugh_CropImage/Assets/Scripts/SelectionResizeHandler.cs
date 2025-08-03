@@ -63,11 +63,12 @@ namespace HughGame.UI.NCrop
 
 		public void StopModifySelectionWith()
 		{
-            _window.StopModifySelectionWith(this);
+            if(_window != null)
+                _window.StopModifySelectionWith(this);
 		}
 
-		public void OnBeginDrag( PointerEventData eventData )
-		{
+        public void OnBeginDrag(PointerEventData eventData)
+        {
             if (_window == null)
                 return;
 
@@ -77,8 +78,8 @@ namespace HughGame.UI.NCrop
                 return;
             }
 
-			_draggingPointer = eventData.pointerId;
-			_draggingPointerEventData = eventData;
+            _draggingPointer = eventData.pointerId;
+            _draggingPointerEventData = eventData;
 
             if ((_directions & EDirection.Left) == EDirection.Left)
                 _initialPosition.x = _selectRectTrans.anchoredPosition.x;
@@ -92,9 +93,9 @@ namespace HughGame.UI.NCrop
 
             _initialTouchPosition = _window.GetTouchPosition(eventData.pressPosition, eventData.pressEventCamera);
 
-			_initialSelectionPosition = _selectRectTrans.anchoredPosition;
+            _initialSelectionPosition = _selectRectTrans.anchoredPosition;
             _initialSelectionSize = _selectRectTrans.sizeDelta;
-		}
+        }
 
 		public void OnDrag( PointerEventData eventData )
         {

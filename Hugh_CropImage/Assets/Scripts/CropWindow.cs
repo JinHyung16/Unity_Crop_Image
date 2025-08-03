@@ -24,16 +24,14 @@ namespace HughGame.UI
         AlwaysVisible = 2 
     };
 
-    public class CropWindow : MonoBehaviour
+    public class CropWindow : BaseWindow
     {
         public interface IListener
         {
-            void OnImageCropped(int selectIndex, Texture2D croppedTexture);
+            void OnImageCropped(Texture2D croppedTexture);
             void OnCropCancelled();
         }
 
-        [Header("Properties")]
-        Canvas Canvas;
         [SerializeField]
         float _autoZoomInThreshold = 0.5f;
         [SerializeField]
@@ -175,31 +173,24 @@ namespace HughGame.UI
         IListener _listener;
 
         bool _shouldRefreshViewport;
-
-        int _selectIndex;
-
         float _minImageScale;
 
         Vector2 _minSize, _maxSize;
         Vector2 _currMinSize, _currMaxSize;
 
-        public void Awake()
+        public void Open(Texture2D texture2D, IListener listener)
         {
-            if (Canvas == null)
-                Canvas = GetComponent<Canvas>();
-        }
-
-        public void Open(int selectIndex, Texture2D texture2D, IListener listener)
-        {
-            Canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            _listener = listener;
-            _selectIndex = selectIndex;
-
-            SetupImage(texture2D);
-
-            Init();
-            SetDefaultSetting();
-            StartCoroutine(OpenWaitOneFrame());
+            OpenInternal(() =>
+            {
+                Canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                _listener = listener;
+                SetupImage(texture2D);
+            }, () =>
+            {
+                Init();
+                SetDefaultSetting();
+                StartCoroutine(OpenWaitOneFrame());
+            });
         }
 
         private System.Collections.IEnumerator OpenWaitOneFrame()
@@ -604,9 +595,9 @@ namespace HughGame.UI
 
             return imageHolderPos;
         }
-
-        public void Close()
+        protected override void OnClosed()
         {
+            base.OnClosed();
             _autoZoomCoroutine = null;
             Destroy(OriginalImage.texture);
 
@@ -616,7 +607,6 @@ namespace HughGame.UI
                 resizeHandler.StopModifySelectionWith();
             }
         }
-
         void Init()
         {
             SizeChangeListener.Init();
@@ -712,7 +702,7 @@ namespace HughGame.UI
                 croppedTexture = MakeTextureReadable(croppedTexture);
             }
 
-            _listener.OnImageCropped(_selectIndex, croppedTexture);
+            _listener.OnImageCropped(croppedTexture);
         }
 
         private Texture2D CropTextureDirectly(Texture2D originalTexture, Vector2 pixelPosition, Vector2 pixelSize, int maxCropSize = 512)

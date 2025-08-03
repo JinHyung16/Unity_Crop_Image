@@ -1181,6 +1181,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b7f5e8b9c4d2a4e6f8a9b0c1d2e3f4a5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  Canvas: {fileID: 0}
   _autoZoomInThreshold: 0.5
   _autoZoomOutThreshold: 0.65
   _autoZoomInFillAmount: 0.64
@@ -1270,9 +1271,9 @@ MonoBehaviour:
   m_UiScaleMode: 1
   m_ReferencePixelsPerUnit: 100
   m_ScaleFactor: 1
-  m_ReferenceResolution: {x: 768, y: 1024}
+  m_ReferenceResolution: {x: 1080, y: 1920}
   m_ScreenMatchMode: 0
-  m_MatchWidthOrHeight: 0
+  m_MatchWidthOrHeight: 0.5
   m_PhysicalUnit: 3
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
@@ -2842,7 +2843,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6925062553476872317}
   - component: {fileID: 6344193935856404901}
-  - component: {fileID: 4240636925404354854}
+  - component: {fileID: 2749556421178069984}
   - component: {fileID: 6412120731342172878}
   m_Layer: 5
   m_Name: EventSystem
@@ -2885,7 +2886,7 @@ MonoBehaviour:
   m_FirstSelected: {fileID: 0}
   m_sendNavigationEvents: 1
   m_DragThreshold: 5
---- !u!114 &4240636925404354854
+--- !u!114 &2749556421178069984
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
