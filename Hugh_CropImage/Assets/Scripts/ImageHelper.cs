@@ -176,7 +176,7 @@ namespace HughGame.Helper
 
         public static int GetImageMaxPixel()
         {
-            return 256;
+            return 512;
         }
 
         public static int GetScreenBasedMaxPixel()
@@ -224,6 +224,7 @@ namespace HughGame.Helper
         {
             if (originalTexture == null)
                 return null;
+
             int textureX = Mathf.RoundToInt(pixelPosition.x);
             int textureY = Mathf.RoundToInt(pixelPosition.y);
             int textureWidth = Mathf.RoundToInt(pixelSize.x);

@@ -79,7 +79,7 @@ namespace HughGame.Managers
                     Directory.CreateDirectory(imageDir);
                 }
 
-                byte[] bytes = texture.EncodeToJPG(50);
+                byte[] bytes = texture.EncodeToJPG(100);
                 File.WriteAllBytes(imagePath, bytes);
             }
             catch (System.Exception e)

@@ -98,8 +98,8 @@ namespace HughGame.UI
             //}
 
             Debug.Log("<color=green> 이미지 로드 성공!</color>");
-            var result2D = ImageHelper.CompressTextureToASTC(texture2D);
-            _listener.OnImageLoaded(result2D);
+            //var result2D = ImageHelper.CompressTextureToASTC(texture2D);
+            _listener.OnImageLoaded(texture2D);
         }
 
 
