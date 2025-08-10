@@ -309,10 +309,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 6365253714699135305}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_SizeDelta: {x: 1080, y: 1758}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &4722062851428308598
 CanvasRenderer:
@@ -1182,20 +1182,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Canvas: {fileID: 0}
-  _autoZoomInThreshold: 0.5
-  _autoZoomOutThreshold: 0.65
-  _autoZoomInFillAmount: 0.64
-  _autoZoomOutFillAmount: 0.51
-  autoZoomCurve:
-    serializedVersion: 2
-    m_Curve: []
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
   _selectionSnapToEdgeThreshold: 5
   _viewportScrollSpeed: 512
   _viewport: {fileID: 6365253714699135305}
   _imageHolder: {fileID: 3486824794203310095}
+  _originalImageRect: {fileID: 8181590107367093716}
   OriginalImage: {fileID: 3861996018442160664}
   _selection: {fileID: 4504761687741450785}
   _selectionGraphics: {fileID: 3413888957249160755}
@@ -1219,8 +1210,6 @@ MonoBehaviour:
   - {fileID: 8372124302703958934}
   - {fileID: 6229482050952073120}
   defaultSetting:
-    AutoZoomEnabled: 0
-    PixelPerfectSelection: 0
     OvalSelection: 1
     MarkTextureNonReadable: 1
     ImageBackGroundColor: {r: 0, g: 0, b: 0, a: 1}

@@ -179,7 +179,7 @@ namespace HughGame.Helper
             return 512;
         }
 
-        public static int GetScreenBasedMaxPixel()
+        public static int GetScreenBasedMinPixel()
         {
             return Mathf.Min(Screen.width, Screen.height);
         }
@@ -220,11 +220,38 @@ namespace HughGame.Helper
             return result;
         }
 
-        public static Texture2D CropTextureDirectly(Texture2D originalTexture, Vector2 pixelPosition, Vector2 pixelSize, int maxCropPixel)
+        public static Texture2D CropTextureDirectly(Texture2D originalTexture, RectTransform originalImageRect, RectTransform selection, int maxCropPixel)
+        {
+            // UI 좌표계에서 텍스처 좌표계로 변환
+            float scaleX = (float)originalTexture.width / originalImageRect.sizeDelta.x;
+            float scaleY = (float)originalTexture.height / originalImageRect.sizeDelta.y;
+
+            // OriginalImageRect의 좌상단 위치 계산 -> 중앙 앵커 보정
+            Vector2 imageTopLeft = originalImageRect.anchoredPosition - (originalImageRect.sizeDelta * 0.5f);
+
+            // Selection의 ImageHolder 기준 절대 위치를 OriginalImageRect 기준 상대 위치로 변환
+            // ImageHolder는 화면 전체이고 중앙 앵커이므로 좌상단으로 변환
+            Vector2 selectionAbsolute = selection.anchoredPosition - (selection.parent.GetComponent<RectTransform>().sizeDelta * 0.5f);
+            Vector2 selectionRelativeToImage = selectionAbsolute - imageTopLeft;
+
+            // Selection의 픽셀 위치 계산 (Texture2D 좌표에선 원점은 좌하단)
+            Vector2 pixelPosition = new Vector2(
+                selectionRelativeToImage.x * scaleX,
+                originalTexture.height - ((selectionRelativeToImage.y + selection.sizeDelta.y) * scaleY)
+            );
+
+            Vector2 pixelSize = new Vector2(
+                selection.sizeDelta.x * scaleX,
+                selection.sizeDelta.y * scaleY
+            );
+
+            return CropTexture(originalTexture, pixelPosition, pixelSize, maxCropPixel);
+        }
+
+        static Texture2D CropTexture(Texture2D originalTexture, Vector2 pixelPosition, Vector2 pixelSize, int maxCropPixel)
         {
             if (originalTexture == null)
                 return null;
-
             int textureX = Mathf.RoundToInt(pixelPosition.x);
             int textureY = Mathf.RoundToInt(pixelPosition.y);
             int textureWidth = Mathf.RoundToInt(pixelSize.x);
@@ -246,6 +273,31 @@ namespace HughGame.Helper
                         $"결과 width*heigth : {croppedTexture.width}*{croppedTexture.height}");
 #endif
             return croppedTexture;
+        }
+
+        public static Vector2 CalculateScaledImageSizeForCropWindow(Texture2D originalTexture)
+        {
+            var scaledSize = new Vector2(originalTexture.width, originalTexture.height);
+            if (originalTexture.width <= Screen.width && originalTexture.height <= Screen.height)
+            {
+                return AddGapMargin(scaledSize);
+            }
+
+            float widthRatio = (float)Screen.width / originalTexture.width;
+            float heightRatio = (float)Screen.height / originalTexture.height;
+            float scaleFactor = Mathf.Min(widthRatio, heightRatio);
+            scaledSize.x *= scaleFactor;
+            scaledSize.y *= scaleFactor;
+
+            return AddGapMargin(scaledSize);
+        }
+
+        static Vector2 AddGapMargin(Vector2 correctionVec2)
+        {
+            var addGapMargin = Mathf.Min(Screen.width - correctionVec2.x, Screen.height - correctionVec2.y);
+            correctionVec2.x += addGapMargin;
+            correctionVec2.y += addGapMargin;
+            return correctionVec2;
         }
     }
 } 

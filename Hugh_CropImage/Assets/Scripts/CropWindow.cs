@@ -1,8 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using HughGame.UI.NCrop;
-using System.Collections;
-using System;
 using HughGame.Helper;
 
 namespace HughGame.UI
@@ -47,6 +45,8 @@ namespace HughGame.UI
         RectTransform _imageHolder;
         public RectTransform ImageHolder => _imageHolder;
 
+        [SerializeField]
+        RectTransform _originalImageRect;
         public RawImage OriginalImage;
 
         [SerializeField]
@@ -68,13 +68,13 @@ namespace HughGame.UI
 
         [Header("Crop Settings")]
         [SerializeField]
-        ImageCropSetting defaultSetting;
-        private ImageCropSetting DefaultSettings
+        CropSetting defaultSetting;
+        private CropSetting DefaultSettings
         {
             get
             {
                 if (defaultSetting == null)
-                    defaultSetting = new ImageCropSetting();
+                    defaultSetting = new CropSetting();
 
                 return defaultSetting;
             }
@@ -192,15 +192,19 @@ namespace HughGame.UI
             _minImageScale = Mathf.Min(_viewportSize.x / _orientedImageSize.x, _viewportSize.y / _orientedImageSize.y);
             _minImageScale = Mathf.Max(_minImageScale, 0.1f);
 
-            // ImageHolder만으로 크기/위치 제어
-            Vector2 scaledImageSize = _orientedImageSize * _minImageScale;
-            Vector2 centerPosition = (_viewportSize - scaledImageSize) * 0.5f;
+            // ImageHolder를 화면 전체 크기로 설정 -> Selection이 전체 화면에서 움직일 수 있게 변경
+            _imageHolder.sizeDelta = _viewportSize;
+            _imageHolder.anchoredPosition = Vector2.zero;
 
-            _imageHolder.sizeDelta = scaledImageSize;
-            //_imageHolder.anchoredPosition = centerPosition;
+            // ImageHolder 앵커를 중앙으로 설정
+            _imageHolder.anchorMin = new Vector2(0.5f, 0.5f);
+            _imageHolder.anchorMax = new Vector2(0.5f, 0.5f);
+            _imageHolder.pivot = new Vector2(0.5f, 0.5f);
 
             if (frameSelection)
+            {
                 _selection.anchoredPosition = (_imageHolder.sizeDelta - _selection.sizeDelta) * 0.5f;
+            }
         }
   
         public bool CanModifySelectionWith(ISelectHandler handler)
@@ -248,14 +252,14 @@ namespace HughGame.UI
 
             newSize = newSize.ClampBetween(_currMinSize, _currMaxSize);
 
-            var maxPixel = ImageHelper.GetScreenBasedMaxPixel();
-            newSize.x = Mathf.Min(newSize.x, maxPixel);
-            newSize.y = Mathf.Min(newSize.y, maxPixel);
+            var minpixel = ImageHelper.GetScreenBasedMinPixel();
+            newSize.x = Mathf.Min(newSize.x, minpixel);
+            newSize.y = Mathf.Min(newSize.y, minpixel);
 
 #if UNITY_EDITOR
-            if ((newSize.x > maxPixel || newSize.y > maxPixel))
+            if ((newSize.x > minpixel || newSize.y > minpixel))
             {
-                Debug.LogWarning($"Selection size exceeded {maxPixel}! Requested: {size}, Clamped: {newSize}");
+                Debug.LogWarning($"Selection size exceeded {minpixel}! Requested: {size}, Clamped: {newSize}");
             }
 #endif
             if (size.x != newSize.x)
@@ -279,6 +283,14 @@ namespace HughGame.UI
 
             _selection.anchoredPosition = ClampSelectionPosition(position, size);
             _selection.sizeDelta = size;
+        }
+        public Vector2 GetTouchPosition(Vector2 screenPos, Camera cam)
+        {
+            Vector2 localPos;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(_viewport, screenPos, cam, out localPos);
+            // ImageHolder가 Viewport 중앙이고 화면 전체 크기이므로 좌표 변환
+            Vector2 imageHolderPos = localPos + (_viewportSize * 0.5f);
+            return imageHolderPos;
         }
 
         public Vector2 ScrollImage(Vector2 imagePosition, EDirection direction)
@@ -316,15 +328,6 @@ namespace HughGame.UI
 
             return imagePosition;
         }
-
-        public Vector2 GetTouchPosition(Vector2 screenPos, Camera cam)
-        {
-            Vector2 localPos;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(_viewport, screenPos, cam, out localPos);
-            Vector2 imageHolderPos = localPos - _imageHolder.anchoredPosition;
-
-            return imageHolderPos;
-        } 
 
         protected override void OnClosed()
         {
@@ -365,46 +368,33 @@ namespace HughGame.UI
         private void SetupImage(Texture2D texture2D)
         {
             OriginalImage.texture = texture2D;
-
-            // OriginalImage RectTransform은 건들지 않음 (Stretch 유지)
-            // _orientedImageTransform = (RectTransform)OriginalImage.transform;
+            _originalImageRect.sizeDelta = ImageHelper.CalculateScaledImageSizeForCropWindow(texture2D);
 
             _originalImageSize = new Vector2(texture2D.width, texture2D.height);
             _orientedImageSize = _originalImageSize;
 
-            // OriginalImage는 원본 그대로 유지
-            // _orientedImageTransform.sizeDelta = Vector2.zero;
-            // _orientedImageTransform.anchoredPosition = Vector2.zero;
-
             _minSize = new Vector2(64f, 64f);
-            var maxPixel = ImageHelper.GetImageMaxPixel();
-            _maxSize = new Vector2(maxPixel, maxPixel);
+
+            var minPixel = ImageHelper.GetScreenBasedMinPixel();
+            _maxSize = new Vector2(minPixel, minPixel);
 
             _currMinSize = _minSize;
             _currMaxSize = _maxSize;
 
-            _imageHolder.sizeDelta = _originalImageSize;
-            _imageHolder.anchoredPosition = Vector2.zero;
-
-            _selection.anchoredPosition = Vector2.zero;
             _selection.sizeDelta = _currMaxSize;
 
             ResetView(false);
+
             _selection.anchoredPosition = (_imageHolder.sizeDelta - _selection.sizeDelta) * 0.5f;
         }
 
         private Vector2 ClampSelectionPosition(Vector2 position, Vector2 size)
         {
-            Vector2 minPosViewport = -_imageHolder.anchoredPosition;
-            Vector2 maxPosViewport = _viewportSize - _imageHolder.anchoredPosition - size;
+            // Selection이 ImageHolder(화면 전체) 영역 내에서 움직이도록 제한
+            Vector2 minPos = Vector2.zero;
+            Vector2 maxPos = _imageHolder.sizeDelta - size;
 
-            Vector2 minPosOverlap = -size;
-            Vector2 maxPosOverlap = _imageHolder.sizeDelta;
-
-            Vector2 finalMinPos = new Vector2(Mathf.Max(minPosViewport.x, minPosOverlap.x), Mathf.Max(minPosViewport.y, minPosOverlap.y));
-            Vector2 finalMaxPos = new Vector2(Mathf.Min(maxPosViewport.x, maxPosOverlap.x), Mathf.Min(maxPosViewport.y, maxPosOverlap.y));
-
-            return position.ClampBetween(finalMinPos, finalMaxPos);
+            return position.ClampBetween(minPos, maxPos);
         }
 
         private void OnViewportDimensionsChange(Vector2 size)
@@ -449,33 +439,19 @@ namespace HughGame.UI
             }
 
             Texture2D originalTexture = OriginalImage.texture as Texture2D;
+#if UNITY_EDITOR
+            Debug.Log($"[CROP DEBUG] 원본 크기: {originalTexture.width}x{originalTexture.height}");
+            Debug.Log($"[CROP DEBUG] ImageHolder 크기: {_imageHolder.sizeDelta}");
+            Debug.Log($"[CROP DEBUG] Selection 위치: {_selection.anchoredPosition}");
+            Debug.Log($"[CROP DEBUG] Selection 크기: {_selection.sizeDelta}");
+            Debug.Log($"[CROP DEBUG] OriginalImageSize: {_originalImageSize}");
+            Debug.Log($"[CROP DEBUG] OrientedImageSize: {_orientedImageSize}");
+#endif
 
-            float scale = (float)originalTexture.width / _imageHolder.sizeDelta.x;
-
-            Vector2 pixelPosition = new Vector2(
-                _selection.anchoredPosition.x * scale,
-                (_imageHolder.sizeDelta.y - _selection.anchoredPosition.y) * scale - (_selection.sizeDelta.y * scale)
-            );
-
-            Vector2 pixelSize = new Vector2(
-                _selection.sizeDelta.x * scale,
-                _selection.sizeDelta.y * scale
-            );
-
-            pixelPosition.x = Mathf.Max(0, pixelPosition.x);
-            pixelPosition.y = Mathf.Max(0, pixelPosition.y);
-            pixelSize.x = Mathf.Min(pixelSize.x, originalTexture.width - pixelPosition.x);
-            pixelSize.y = Mathf.Min(pixelSize.y, originalTexture.height - pixelPosition.y);
-
-            float finalPixelSize = Mathf.Min(pixelSize.x, pixelSize.y);
-            pixelSize = new Vector2(finalPixelSize, finalPixelSize);
-
-            Texture2D croppedTexture = ImageHelper.CropTextureDirectly(
-                originalTexture,
-                pixelPosition,
-                pixelSize,
-                ImageHelper.GetImageMaxPixel()
-            );
+            Texture2D croppedTexture = ImageHelper.CropTextureDirectly(originalTexture, 
+                                                                       _originalImageRect, 
+                                                                       _selection, 
+                                                                       ImageHelper.GetImageMaxPixel());
 
             Debug.Assert(croppedTexture != null, "이미지 Crop 실패함");
 
@@ -500,27 +476,5 @@ namespace HughGame.UI
 
             _listener.OnImageCropped(croppedTexture);
         }
-    }
-
-    [Serializable]
-    public class ImageCropSetting
-    {
-        public bool OvalSelection = true;
-        public bool MarkTextureNonReadable = false;
-
-        public Color ImageBackGroundColor = Color.black;
-
-        public EVisibility GuidelinesVisibility = EVisibility.AlwaysVisible;
-
-        public Vector2 SelectionMinSize = Vector2.zero;
-        public Vector2 SelectionMaxSize = Vector2.zero;
-
-        public float SelectionMinAspectRatio = 1f;
-        public float SelectionMaxAspectRatio = 1f;
-
-        public float SelectionInitialPaddingLeft = 0.1f;
-        public float SelectionInitialPaddingTop = 0.1f;
-        public float SelectionInitialPaddingRight = 0.1f;
-        public float SelectionInitialPaddingBottom = 0.1f;
     }
 } 
