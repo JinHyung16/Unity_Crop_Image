@@ -143,7 +143,7 @@ namespace HughGame.Helper
 #pragma warning restore CS0162
             if (SystemInfo.SupportsTextureFormat(astcFormat) == false)
             {
-               Debug.Assert(false, $"ASTC {astcBlockSize}x{astcBlockSize} 포맷은 없음. 지원하는거 쓰셈");
+                Debug.Assert(false, $"ASTC {astcBlockSize}x{astcBlockSize} 포맷은 없음. 지원하는거 쓰셈");
                 return originalTexture;
             }
 
@@ -181,7 +181,8 @@ namespace HughGame.Helper
 
         public static int GetScreenBasedMinPixel()
         {
-            return Mathf.Min(Screen.width, Screen.height);
+            var curResolution = GetDeviceResolution();
+            return Mathf.Min((int)curResolution.x, (int)curResolution.y);
         }
 
         public static Texture2D ApplyOvalMask(Texture2D source, Color backgroundColor, bool markNonReadable = true)
@@ -264,10 +265,8 @@ namespace HughGame.Helper
             Color[] pixels = originalTexture.GetPixels(textureX, textureY, textureWidth, textureHeight);
             croppedTexture.SetPixels(pixels);
             croppedTexture.Apply();
-            if (croppedTexture.width > maxCropPixel || croppedTexture.height > maxCropPixel)
-            {
-                croppedTexture = ResizeTexture(croppedTexture, maxCropPixel);
-            }
+            croppedTexture = ResizeTexture(croppedTexture, maxCropPixel);
+
 #if UNITY_EDITOR
             Debug.Log($"<color=green>이미지 Crop 성공" +
                         $"결과 width*heigth : {croppedTexture.width}*{croppedTexture.height}");
@@ -294,10 +293,52 @@ namespace HughGame.Helper
 
         static Vector2 AddGapMargin(Vector2 correctionVec2)
         {
-            var addGapMargin = Mathf.Min(Screen.width - correctionVec2.x, Screen.height - correctionVec2.y);
+            var getDeviceResoultion = GetDeviceResolution();
+            var addGapMargin = (int)Mathf.Min(getDeviceResoultion.x - correctionVec2.x, getDeviceResoultion.y - correctionVec2.y);
             correctionVec2.x += addGapMargin;
             correctionVec2.y += addGapMargin;
             return correctionVec2;
         }
+
+        static Vector2 GetDeviceResolution()
+        {
+            Vector2 resolution = new Vector2(Screen.width, Screen.height);
+
+#if UNITY_EDITOR
+            return resolution;
+
+#elif UNITY_ANDROID
+            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (var metrics = new AndroidJavaObject("android.util.DisplayMetrics"))
+            {
+                var windowManager = activity.Call<AndroidJavaObject>("getWindowManager");
+                var display = windowManager.Call<AndroidJavaObject>("getDefaultDisplay");
+                display.Call("getRealMetrics", metrics);
+
+                var width = metrics.Get<int>("widthPixels");
+                var height = metrics.Get<int>("heightPixels");
+                
+                if(width > 0)
+                    resolution.x = width;
+
+                if(height > 0)
+                    resolution.y = height;
+                    
+                return resolution;
+            }
+
+#elif UNITY_IOS
+            var width = GetNativeScreenWidth();
+            if(width > 0)
+                resolution.x = width;
+
+            var height = GetNativeScreenHeight();
+            if(height > 0)
+                resolution.y = height;
+
+            return resolution;
+#endif
+        }
     }
-} 
+}

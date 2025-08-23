@@ -11,6 +11,7 @@ namespace HughGame.UI
             void OnImageLoaded(Texture2D texture);
         }
 
+        public RectTransform PrfoileImgRectTransform;
         public RawImage RawImg;
 
         IListener _listener;
@@ -25,9 +26,11 @@ namespace HughGame.UI
 
         public void SetProfileImage(Texture2D texture)
         {
+            var resolution = ImageHelper.GetScreenBasedMinPixel();
+            PrfoileImgRectTransform.sizeDelta = new Vector2(resolution, resolution);
             RawImg.texture = texture;
         }
-
+        
         protected override void OnClosed()
         {
             base.OnClosed();
@@ -75,12 +78,11 @@ namespace HughGame.UI
 
         void LoadImage(string path)
         {
-            // 추후에 쓸 수 있어서 현재는 무조건 TRUE return
-            if (ImageHelper.CheckUploadImageSize(path) == false)
-            {
-                Debug.Log("<color=red>이미지 용량이 너무 큽니다</color>");
-                return;
-            }
+            //if (ImageHelper.CheckUploadImageSize(path) == false)
+            //{
+            //    Debug.Log("<color=red>이미지 용량이 너무 큽니다</color>");
+            //    return;
+            //}
 
             var texture2D = NativeGallery.LoadImageAtPath(path, ImageHelper.GetImageMaxPixel(), false);
             if (texture2D == null)
