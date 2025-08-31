@@ -1,8 +1,8 @@
+using HughGame.Managers;
 using System.Collections;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
-using HughGame.Managers;
 
 namespace HughGame.Helper
 {
@@ -23,16 +23,14 @@ namespace HughGame.Helper
         }
         private static IEnumerator LoadProfileImageCoroutine(string accountId, string url, ImageLoadCallback callback)
         {
-            var cachedURL = CachedProfileImageManager.Instance.GetCachedProfileUrl(accountId);
+            var cachedURL = CachedProfileImageManager.Instance.GetCachedProfileUrl(accountId, url);
 
             if (string.IsNullOrEmpty(cachedURL) || cachedURL != url)
             {
                 using (var request = UnityWebRequestTexture.GetTexture(url))
                 {
-                    request.SetRequestHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
-                    request.SetRequestHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-                    request.SetRequestHeader("Pragma", "no-cache");
-                    request.SetRequestHeader("Expires", "0");
+                    request.timeout = 2;
+                    request.useHttpContinue = false;
 
                     yield return request.SendWebRequest();
 
@@ -41,26 +39,71 @@ namespace HughGame.Helper
                         var downloadedTexture = DownloadHandlerTexture.GetContent(request);
                         if (downloadedTexture != null)
                         {
-                            SaveProfileImage(accountId, downloadedTexture);
+                            var uiTexture = CreateUITexture(downloadedTexture);
+                            var maxPixel = GetImageMaxPixel();
+
+                            var textureForSave = uiTexture;
+                            if(uiTexture.width != maxPixel || uiTexture.height != maxPixel)
+                            {
+                                textureForSave = ResizeTextureExactSquare(uiTexture, maxPixel);
+                                Object.Destroy(uiTexture);
+                            }
+                            SaveProfileImage(accountId, url, downloadedTexture);
                             UpdateProfileCache(accountId, url);
                             callback?.Invoke(downloadedTexture, true);
                             yield break;
                         }
                     }
-#if UNITY_EDITOR
+
                     Debug.Log($"<color=red>UnityWebRequest 이미지 다운로드 실패" +
                         $"AccountId[{accountId}]" +
                         $"URL[{url}]" +
                         $"Error[{request.error}]</color>");
-#endif
+
                     callback?.Invoke(null, false);
                     yield break;
                 }
             }
+
+            if(cachedURL == url)
+            {
+                var imagePath = CachedProfileImageManager.Instance.GetProfileImagePath(accountId, url);
+                if (File.Exists(imagePath))
+                {
+                    byte[] fileData = File.ReadAllBytes(imagePath);
+                    var maxPixel = GetImageMaxPixel();
+                    Texture2D texture = new Texture2D(maxPixel, maxPixel, TextureFormat.ARGB32, false);
+                    if (texture.LoadImage(fileData))
+                    {
+                        if (texture.width != maxPixel || texture.height != maxPixel)
+                        {
+                            var resized = ResizeTextureExactSquare(texture, maxPixel);
+                            SaveProfileImage(accountId, url, resized);
+                            texture = resized;
+                            Object.Destroy(resized);
+                        }
+
+                        texture.filterMode = FilterMode.Bilinear;
+                        texture.anisoLevel = 1;
+                        texture.wrapMode = TextureWrapMode.Clamp;
+                        callback?.Invoke(texture, true);
+                        yield break;
+                    }
+
+                    Object.Destroy(texture);
+                    Debug.Log($"<color=red>이미지 로드 실패, 파일에 있는지 확인 해보셈" +
+                    $"AccountId: : {accountId}</color>\n" +
+                    $"이미지 경로 : {imagePath}\n" +
+                    $"URL : {url}\n" +
+                    $"Cached URL : {cachedURL}");
+                }
+            }
+            callback?.Invoke(null, false);
         }
-        private static void SaveProfileImage(string accountId, Texture2D texture)
+
+        private static void SaveProfileImage(string accountId, string url, Texture2D texture)
         {
-            CachedProfileImageManager.Instance.SaveProfileImage(accountId, texture);
+            CachedProfileImageManager.Instance.SaveProfileImage(accountId, url, texture);
         }
 
         private static void UpdateProfileCache(string accountId, string url)
@@ -70,7 +113,8 @@ namespace HughGame.Helper
 
         private static Texture2D ResizeTexture(Texture2D source, int maxWidth, int maxHeight)
         {
-            if (source == null) return null;
+            if (source == null) 
+                return null;
             float ratio = Mathf.Min((float)maxWidth / source.width, (float)maxHeight / source.height);
 
             if (ratio >= 1.0f)
@@ -93,6 +137,62 @@ namespace HughGame.Helper
             RenderTexture.ReleaseTemporary(rt);
 
             return resized;
+        }
+
+        private static Texture2D ResizeTextureExactSquare(Texture2D source, int targetSize)
+        {
+            if (source == null)
+                return null;
+
+            float scale = Mathf.Max((float)targetSize / source.width, (float)targetSize / source.height);
+            int scaledW = Mathf.CeilToInt(source.width * scale);
+            int scaledH = Mathf.CeilToInt(source.height * scale);
+
+            RenderTexture rt = RenderTexture.GetTemporary(scaledW, scaledH, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Default);
+            RenderTexture previous = RenderTexture.active;
+            Graphics.Blit(source, rt);
+            RenderTexture.active = rt;
+
+            Texture2D scaled = new Texture2D(scaledW, scaledH, source.format, false);
+            scaled.ReadPixels(new Rect(0, 0, scaledW, scaledH), 0, 0);
+            scaled.Apply(false, false);
+
+            int offsetX = (scaledW - targetSize) / 2;
+            int offsetY = (scaledH - targetSize) / 2;
+            offsetX = Mathf.Max(0, offsetX);
+            offsetY = Mathf.Max(0, offsetY);
+
+            Color[] pixels = scaled.GetPixels(offsetX, offsetY, Mathf.Min(targetSize, scaledW), Mathf.Min(targetSize, scaledH));
+            Texture2D result = new Texture2D(targetSize, targetSize, TextureFormat.ARGB32, false);
+            result.SetPixels(pixels);
+            result.Apply(false, false);
+
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(rt);
+            return result;
+        }
+
+        private static Texture2D CreateUITexture(Texture2D source)
+        {
+            if (source == null)
+                return null;
+
+            bool hasMipmaps = source.mipmapCount > 1;
+            if (hasMipmaps)
+            {
+                var uiTexture = new Texture2D(source.width, source.height, TextureFormat.ARGB32, false);
+                uiTexture.SetPixels32(source.GetPixels32());
+                uiTexture.Apply(false, false);
+                uiTexture.filterMode = FilterMode.Bilinear;
+                uiTexture.anisoLevel = 1;
+                uiTexture.wrapMode = TextureWrapMode.Clamp;
+                return uiTexture;
+            }
+
+            source.filterMode = FilterMode.Bilinear;
+            source.anisoLevel = 1;
+            source.wrapMode = TextureWrapMode.Clamp;
+            return source;
         }
         private static TextureFormat GetASTCFormat(int blockSize)
         {
@@ -223,28 +323,57 @@ namespace HughGame.Helper
 
         public static Texture2D CropTextureDirectly(Texture2D originalTexture, RectTransform originalImageRect, RectTransform selection, int maxCropPixel)
         {
-            // UI 좌표계에서 텍스처 좌표계로 변환
-            float scaleX = (float)originalTexture.width / originalImageRect.sizeDelta.x;
-            float scaleY = (float)originalTexture.height / originalImageRect.sizeDelta.y;
+            if (originalTexture == null || originalImageRect == null || selection == null)
+                return null;
 
-            // OriginalImageRect의 좌상단 위치 계산 -> 중앙 앵커 보정
-            Vector2 imageTopLeft = originalImageRect.anchoredPosition - (originalImageRect.sizeDelta * 0.5f);
+            var reference = originalImageRect.parent as RectTransform;
+            if (reference == null)
+                reference = originalImageRect;
 
-            // Selection의 ImageHolder 기준 절대 위치를 OriginalImageRect 기준 상대 위치로 변환
-            // ImageHolder는 화면 전체이고 중앙 앵커이므로 좌상단으로 변환
-            Vector2 selectionAbsolute = selection.anchoredPosition - (selection.parent.GetComponent<RectTransform>().sizeDelta * 0.5f);
-            Vector2 selectionRelativeToImage = selectionAbsolute - imageTopLeft;
+            var imgBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(reference, originalImageRect);
+            var selBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(reference, selection);
 
-            // Selection의 픽셀 위치 계산 (Texture2D 좌표에선 원점은 좌하단)
-            Vector2 pixelPosition = new Vector2(
-                selectionRelativeToImage.x * scaleX,
-                originalTexture.height - ((selectionRelativeToImage.y + selection.sizeDelta.y) * scaleY)
-            );
+            Vector2 imgSize = imgBounds.size;
+            Vector2 imgMinBL = new Vector2(imgBounds.min.x, imgBounds.min.y);
 
-            Vector2 pixelSize = new Vector2(
-                selection.sizeDelta.x * scaleX,
-                selection.sizeDelta.y * scaleY
-            );
+            float imageAspect = imgSize.x > 0f && imgSize.y > 0f ? imgSize.x / imgSize.y : 1f;
+            float texAspect = (float)originalTexture.width / Mathf.Max(1, originalTexture.height);
+
+            Vector2 contentSize = imgSize;
+            Vector2 contentOffset = Vector2.zero;
+            if (texAspect > imageAspect)
+            {
+                // 좌우가 꽉 차고 위아래 레터박스
+                float scaledH = imgSize.x / texAspect;
+                contentOffset.y = (imgSize.y - scaledH) * 0.5f;
+                contentSize.y = scaledH;
+            }
+            else if (texAspect < imageAspect)
+            {
+                // 위아래가 꽉 차고 좌우 레터박스
+                float scaledW = imgSize.y * texAspect;
+                contentOffset.x = (imgSize.x - scaledW) * 0.5f;
+                contentSize.x = scaledW;
+            }
+
+            // 선택 영역을 이미지 표시 영역 좌하단 기준으로 변환
+            Vector2 selMinBL = new Vector2(selBounds.min.x, selBounds.min.y);
+            Vector2 selectionRelativeToImage = selMinBL - imgMinBL;
+            Vector2 selectionRelativeToContent = selectionRelativeToImage - contentOffset;
+
+            // UI 좌표(픽셀 아님) -> 텍스처 픽셀 좌표로 스케일
+            float scaleX = contentSize.x > 0f ? (float)originalTexture.width / contentSize.x : 0f;
+            float scaleY = contentSize.y > 0f ? (float)originalTexture.height / contentSize.y : 0f;
+
+            // GetPixels은 좌하단 원점 기준. 시작/끝을 분리해 반올림 일관성 확보
+            float pxStartX = selectionRelativeToContent.x * scaleX;
+            float pxStartY = selectionRelativeToContent.y * scaleY;
+            Vector2 uiSelSize = selBounds.size;
+            float pxEndX = (selectionRelativeToContent.x + uiSelSize.x) * scaleX;
+            float pxEndY = (selectionRelativeToContent.y + uiSelSize.y) * scaleY;
+
+            Vector2 pixelPosition = new Vector2(pxStartX, pxStartY);
+            Vector2 pixelSize = new Vector2(pxEndX - pxStartX, pxEndY - pxStartY);
 
             return CropTexture(originalTexture, pixelPosition, pixelSize, maxCropPixel);
         }
@@ -253,44 +382,65 @@ namespace HughGame.Helper
         {
             if (originalTexture == null)
                 return null;
-            int textureX = Mathf.RoundToInt(pixelPosition.x);
-            int textureY = Mathf.RoundToInt(pixelPosition.y);
-            int textureWidth = Mathf.RoundToInt(pixelSize.x);
-            int textureHeight = Mathf.RoundToInt(pixelSize.y);
-            textureX = Mathf.Clamp(textureX, 0, originalTexture.width - 1);
-            textureY = Mathf.Clamp(textureY, 0, originalTexture.height - 1);
-            textureWidth = Mathf.Clamp(textureWidth, 1, originalTexture.width - textureX);
-            textureHeight = Mathf.Clamp(textureHeight, 1, originalTexture.height - textureY);
-            Texture2D croppedTexture = new Texture2D(textureWidth, textureHeight, TextureFormat.ARGB32, false);
-            Color[] pixels = originalTexture.GetPixels(textureX, textureY, textureWidth, textureHeight);
-            croppedTexture.SetPixels(pixels);
-            croppedTexture.Apply();
-            croppedTexture = ResizeTexture(croppedTexture, maxCropPixel);
 
+            // 반올림 편향 최소화: 시작/끝을 각각 반올림하여 폭/높이 계산
+            int reqX = Mathf.RoundToInt(pixelPosition.x);
+            int reqY = Mathf.RoundToInt(pixelPosition.y);
+            int endX = Mathf.RoundToInt(pixelPosition.x + pixelSize.x);
+            int endY = Mathf.RoundToInt(pixelPosition.y + pixelSize.y);
+            int reqW = Mathf.Max(1, endX - reqX);
+            int reqH = Mathf.Max(1, endY - reqY);
+
+            // 클램프 영역 계산
+            int ix = Mathf.Clamp(reqX, 0, originalTexture.width);
+            int iy = Mathf.Clamp(reqY, 0, originalTexture.height);
+            int ix2 = Mathf.Clamp(reqX + reqW, 0, originalTexture.width);
+            int iy2 = Mathf.Clamp(reqY + reqH, 0, originalTexture.height);
+            int iw = Mathf.Max(0, ix2 - ix);
+            int ih = Mathf.Max(0, iy2 - iy);
+
+            Texture2D result = new Texture2D(reqW, reqH, TextureFormat.ARGB32, false);
+            var fill = new Color[reqW * reqH];
+            for (int i = 0; i < fill.Length; i++) fill[i] = Color.black;
+            result.SetPixels(fill);
+
+            if (iw > 0 && ih > 0)
+            {
+                Color[] src = originalTexture.GetPixels(ix, iy, iw, ih);
+                int dx = ix - reqX;
+                int dy = iy - reqY;
+                result.SetPixels(dx, dy, iw, ih, src);
+            }
+
+            result.Apply(false, false);
+            Texture2D croppedTexture = ResizeTexture(result, maxCropPixel);
 #if UNITY_EDITOR
-            Debug.Log($"<color=green>이미지 Crop 성공" +
-                        $"결과 width*heigth : {croppedTexture.width}*{croppedTexture.height}");
+            Debug.Log($"<color=green>이미지 Crop 성공 요청:{reqW}x{reqH} 교차:{iw}x{ih} 결과:{croppedTexture.width}x{croppedTexture.height}</color>");
 #endif
+            if (!ReferenceEquals(result, croppedTexture))
+            {
+                Object.Destroy(result);
+            }
+
             return croppedTexture;
         }
 
-        public static Vector2 CalculateScaledImageSizeForCropWindow(Texture2D originalTexture)
+        public static Vector2 CalculateScaledImageSize(Texture2D originalTexture)
         {
+            var resolution = GetDeviceResolution();
+
             var scaledSize = new Vector2(originalTexture.width, originalTexture.height);
-            if (originalTexture.width <= Screen.width && originalTexture.height <= Screen.height)
+            if (originalTexture.width <= resolution.x && originalTexture.height <= resolution.y)
             {
                 return AddGapMargin(scaledSize);
             }
 
-            float widthRatio = (float)Screen.width / originalTexture.width;
-            float heightRatio = (float)Screen.height / originalTexture.height;
+            float widthRatio = resolution.x / originalTexture.width;
+            float heightRatio = resolution.y / originalTexture.height;
             float scaleFactor = Mathf.Min(widthRatio, heightRatio);
-            scaledSize.x *= scaleFactor;
-            scaledSize.y *= scaleFactor;
-
+            scaledSize *= scaleFactor;
             return AddGapMargin(scaledSize);
         }
-
         static Vector2 AddGapMargin(Vector2 correctionVec2)
         {
             var getDeviceResoultion = GetDeviceResolution();
@@ -300,6 +450,30 @@ namespace HughGame.Helper
             return correctionVec2;
         }
 
+        public static Vector2 CalculateScaledImageSize(Texture2D originalTexture, Vector2 containerSize)
+        {
+            if (originalTexture == null)
+                return Vector2.zero;
+
+            var scaledSize = new Vector2(originalTexture.width, originalTexture.height);
+            if (scaledSize.x <= 0f || scaledSize.y <= 0f || containerSize.x <= 0f || containerSize.y <= 0f)
+                return scaledSize;
+
+            float widthRatio = containerSize.x / scaledSize.x;
+            float heightRatio = containerSize.y / scaledSize.y;
+            float scale = Mathf.Min(widthRatio, heightRatio);
+            scaledSize *= scale;
+            return scaledSize;
+        }
+
+#if UNITY_IOS
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        static extern int GetNativeScreenWidth();
+
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        static extern int GetNativeScreenHeight();
+
+#endif
         static Vector2 GetDeviceResolution()
         {
             Vector2 resolution = new Vector2(Screen.width, Screen.height);

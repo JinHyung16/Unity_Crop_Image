@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace HughGame.Managers
@@ -18,17 +19,19 @@ namespace HughGame.Managers
             }
         }
 
-        readonly Dictionary<string, string> _cachedProfileURLDict = new Dictionary<string, string>();
+        readonly Dictionary<string, List<string>> _cachedUrlDict = new Dictionary<string, List<string>>();
 
-        const string FolderName = ".ProfileImage";
-        const string ImageListFolderName = ".Image";
-        const string ProfileListFileName = ".profilelist.txt";
+        const string FolderName = "ProfileImage";
+        const string ImageListFolderName = "Image";
+        const string ProfileListFileName = "profilelist.txt";
         const string Separator = "::";
 
         const int CacheDurationDays = 7;
 
-        private string _indexFilePath;
-        private bool _isDirty = false;
+        string _indexFilePath;
+        bool _isDirty = false;
+
+        List<string> _removeFileList = new List<string>();
 
         public void InitAfterLogin()
         {
@@ -38,19 +41,20 @@ namespace HughGame.Managers
                 if (Directory.Exists(cacheDirectory) == false)
                 {
                     Directory.CreateDirectory(cacheDirectory);
+                }
 
 #if UNITY_EDITOR_WIN
-                    File.SetAttributes(cacheDirectory, File.GetAttributes(cacheDirectory) | FileAttributes.Hidden);
-#endif
+                var attrs = File.GetAttributes(cacheDirectory);
+                if ((attrs & FileAttributes.Hidden) != 0)
+                {
+                    File.SetAttributes(cacheDirectory, attrs & ~FileAttributes.Hidden);
                 }
+#endif
                 _indexFilePath = Path.Combine(cacheDirectory, ProfileListFileName);
 
                 if (File.Exists(_indexFilePath) == false)
                 {
                     File.Create(_indexFilePath).Close();
-#if UNITY_EDITOR_WIN
-                    File.SetAttributes(cacheDirectory, File.GetAttributes(cacheDirectory) | FileAttributes.Hidden);
-#endif
                 }
 
                 LoadCacheIndexFromFile();
@@ -63,15 +67,16 @@ namespace HughGame.Managers
         }
         public void Clear()
         {
+            RemoveCacheIndexToFile();
             SaveCacheIndexToFile();
-            _cachedProfileURLDict.Clear();
+            _cachedUrlDict.Clear();
+            _removeFileList.Clear();
         }
-
-        public void SaveProfileImage(string accountId, Texture2D texture)
+        public void SaveProfileImage(string accountId, string url, Texture2D texture)
         {
             try
             {
-                var imagePath = GetProfileImagePath(accountId);
+                var imagePath = GetProfileImagePath(accountId, url);
                 var imageDir = Path.GetDirectoryName(imagePath);
 
                 if (imageDir != null && Directory.Exists(imageDir) == false)
@@ -88,16 +93,28 @@ namespace HughGame.Managers
             }
         }
 
-        public string GetProfileImagePath(string accountId)
+        public string GetProfileImagePath(string accountId, string url)
         {
             var imageDir = Path.Combine(Application.persistentDataPath, FolderName, ImageListFolderName);
-            return Path.Combine(imageDir, accountId);
+            var fileName = (accountId + url).Replace("/", "_").Replace("\\", "_");
+            return Path.Combine(imageDir, fileName);
         }
 
-        public string GetCachedProfileUrl(string accountId)
+        public string GetCachedProfileUrl(string accountId, string url)
         {
-            _cachedProfileURLDict.TryGetValue(accountId, out var url);
-            return url;
+            //_cachedProfileURLDict.TryGetValue(accountId, out var url);
+            if (_cachedUrlDict.TryGetValue(accountId, out var list))
+            {
+                if (list == null || list.Count == 0)
+                    return string.Empty;
+
+                var findIndex = list.FindIndex(oldUrl => oldUrl == url);
+                if (findIndex >= 0)
+                {
+                    return list[findIndex];
+                }
+            }
+            return string.Empty;
         }
 
 
@@ -106,14 +123,41 @@ namespace HughGame.Managers
             if (string.IsNullOrEmpty(accountId) || string.IsNullOrEmpty(url))
                 return;
 
-            if (_cachedProfileURLDict.TryGetValue(accountId, out var oldUrl) && oldUrl == url)
+            if (_cachedUrlDict.TryGetValue(accountId, out var list) == false)
+            {
+                list = new List<string>();
+                _cachedUrlDict.Add(accountId, list);
+            }
+
+            var findIndex = list.FindIndex(existingUrl => existingUrl == url);
+            if (findIndex >= 0)
                 return;
 
-            _cachedProfileURLDict[accountId] = url;
+            list.Add(url);
             _isDirty = true;
         }
 
-        private void CleanUpExpiredCache()
+        public void RemoveProfileRegist(string accountId, string url)
+        {
+            if (string.IsNullOrEmpty(accountId) || string.IsNullOrEmpty(url))
+                return;
+
+
+            if (_cachedUrlDict.TryGetValue(accountId, out var list) == false)
+                return;
+
+            var findIndex = list.FindIndex(existingUrl => existingUrl == url);
+            if (findIndex < 0)
+                return;
+
+            list.RemoveAt(findIndex);
+
+            var profileFilePath = GetProfileImagePath(accountId, url);
+            _removeFileList.Add(profileFilePath);
+        }
+
+
+        void CleanUpExpiredCache()
         {
             try
             {
@@ -121,33 +165,53 @@ namespace HughGame.Managers
                 if (Directory.Exists(imageDir) == false)
                     return;
 
-                var deletedAccountIds = new List<string>();
                 var files = Directory.GetFiles(imageDir);
+                var expiredPaths = new HashSet<string>();
 
                 foreach (var filePath in files)
                 {
                     var lastWriteTime = File.GetLastWriteTimeUtc(filePath);
                     if ((System.DateTime.UtcNow - lastWriteTime).TotalDays > CacheDurationDays)
                     {
-                        var accountId = Path.GetFileName(filePath);
-
-                        File.Delete(filePath);
-                        deletedAccountIds.Add(accountId);
+                        // 파일 우선 삭제
+                        try
+                        {
+                            File.Delete(filePath);
+                            expiredPaths.Add(filePath);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            Debug.LogError($"만료된 프로필 이미지 삭제 실패: {filePath} - {ex.Message}");
+                        }
 #if UNITY_EDITOR
                         Debug.Log($"만료된 프로필 이미지 삭제: {filePath}");
 #endif
                     }
                 }
 
-                if (deletedAccountIds.Count > 0)
+                if (expiredPaths.Count > 0)
                 {
-                    foreach (var accountId in deletedAccountIds)
+                    // 삭제된 파일에 매핑되는 (accountId, url) 쌍을 인덱스에서 제거
+                    var keysToRemove = new List<string>();
+                    foreach (var kv in _cachedUrlDict)
                     {
-                        _cachedProfileURLDict.Remove(accountId);
+                        var urls = kv.Value;
+                        if (urls == null || urls.Count == 0)
+                            continue;
+
+                        // 현재 accountId의 url 리스트에서, 파일 경로가 만료 목록에 있는 항목 제거
+                        urls.RemoveAll(u => expiredPaths.Contains(GetProfileImagePath(kv.Key, u)));
+
+                        if (urls.Count == 0)
+                            keysToRemove.Add(kv.Key);
                     }
+
+                    foreach (var k in keysToRemove)
+                        _cachedUrlDict.Remove(k);
+
                     _isDirty = true;
 #if UNITY_EDITOR
-                    Debug.Log($"{deletedAccountIds.Count}개의 만료된 캐시 항목을 정리했습니다.");
+                    Debug.Log($"{expiredPaths.Count}개의 만료된 캐시 파일과 매핑 인덱스를 정리했습니다.");
 #endif
                 }
             }
@@ -157,7 +221,7 @@ namespace HughGame.Managers
             }
         }
 
-        private void LoadCacheIndexFromFile()
+        void LoadCacheIndexFromFile()
         {
             if (File.Exists(_indexFilePath) == false)
             {
@@ -170,7 +234,8 @@ namespace HughGame.Managers
             try
             {
                 var lines = File.ReadAllLines(_indexFilePath);
-                _cachedProfileURLDict.Clear();
+                _cachedUrlDict.Clear();
+                //_cachedProfileURLDict.Clear();
 
                 foreach (var line in lines)
                 {
@@ -186,20 +251,27 @@ namespace HughGame.Managers
                     if (string.IsNullOrEmpty(accountId))
                         continue;
 
-                    _cachedProfileURLDict[accountId] = url;
+                    if (_cachedUrlDict.TryGetValue(accountId, out var urlList) == false)
+                    {
+                        urlList = new List<string>();
+                        _cachedUrlDict.Add(accountId, urlList);
+                    }
+                    urlList.Add(url);
+
+                    //_cachedProfileURLDict[accountId] = url;
                 }
 #if UNITY_EDITOR
-                Debug.Log($"저장되어있던 정보 {_cachedProfileURLDict.Count} 개 로드 성공");
+                Debug.Log($"저장되어있던 정보 {_cachedUrlDict.Count} 개 로드 성공");
 #endif
             }
             catch (System.Exception e)
             {
-                _cachedProfileURLDict.Clear();
+                _cachedUrlDict.Clear();
                 Debug.LogError($"로드 실패: {e.Message}");
             }
         }
 
-        private void SaveCacheIndexToFile()
+        void SaveCacheIndexToFile()
         {
             if (_isDirty == false)
                 return;
@@ -208,21 +280,53 @@ namespace HughGame.Managers
             {
                 using (var writer = new StreamWriter(_indexFilePath, false))
                 {
-                    foreach (var entry in _cachedProfileURLDict)
+                    foreach (var entry in _cachedUrlDict)
                     {
-                        writer.WriteLine($"{entry.Key}{Separator}{entry.Value}");
+                        foreach (var url in entry.Value)
+                        {
+                            writer.WriteLine($"{entry.Key}{Separator}{url}");
+                        }
                     }
                 }
-
                 _isDirty = false;
 #if UNITY_EDITOR
-                Debug.Log($"<color=green> {ProfileListFileName}에 {_cachedProfileURLDict.Count} 개 저장 성공!</color>");
+                var count = _cachedUrlDict.Values == null ? 0 : _cachedUrlDict.Values.Count;
+                Debug.Log($"<color=green> {ProfileListFileName}에 {_cachedUrlDict.Count}개 계정의 {count}개 URL 저장 성공!</color>");
 #endif
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"파일 저장 실패: {e.Message}");
             }
+        }
+
+        void RemoveCacheIndexToFile()
+        {
+            if (_removeFileList.Count == 0)
+                return;
+
+            int successCount = 0;
+            foreach (var filePath in _removeFileList)
+            {
+                try
+                {
+                    if (File.Exists(filePath))
+                    {
+                        File.Delete(filePath);
+                        successCount++;
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"프로필 이미지 파일 삭제 실패: {filePath} - {e.Message}");
+                }
+            }
+
+#if UNITY_EDITOR
+            Debug.Log($"삭제 대기 목록의 프로필 이미지 {successCount}개 삭제 완료");
+#endif
+            _removeFileList.Clear();
+
         }
     }
 }

@@ -133,6 +133,8 @@ namespace HughGame.UI
         bool _shouldRefreshViewport;
         float _minImageScale;
 
+        int _minPixel;
+
         Vector2 _minSize, _maxSize;
         Vector2 _currMinSize, _currMaxSize;
 
@@ -142,6 +144,7 @@ namespace HughGame.UI
             {
                 Canvas.renderMode = RenderMode.ScreenSpaceOverlay;
                 _listener = listener;
+                _minPixel = ImageHelper.GetScreenBasedMinPixel();
             }, () =>
             {
                 Init();
@@ -201,6 +204,9 @@ namespace HughGame.UI
             _imageHolder.anchorMax = new Vector2(0.5f, 0.5f);
             _imageHolder.pivot = new Vector2(0.5f, 0.5f);
 
+            _currMaxSize = _imageHolder.sizeDelta;
+            _minPixel = Mathf.RoundToInt(Mathf.Min(_imageHolder.sizeDelta.x, _imageHolder.sizeDelta.y));
+
             if (frameSelection)
             {
                 _selection.anchoredPosition = (_imageHolder.sizeDelta - _selection.sizeDelta) * 0.5f;
@@ -252,14 +258,13 @@ namespace HughGame.UI
 
             newSize = newSize.ClampBetween(_currMinSize, _currMaxSize);
 
-            var minpixel = ImageHelper.GetScreenBasedMinPixel();
-            newSize.x = Mathf.Min(newSize.x, minpixel);
-            newSize.y = Mathf.Min(newSize.y, minpixel);
+            newSize.x = Mathf.Min(newSize.x, _minPixel);
+            newSize.y = Mathf.Min(newSize.y, _minPixel);
 
 #if UNITY_EDITOR
-            if ((newSize.x > minpixel || newSize.y > minpixel))
+            if ((newSize.x > _minPixel || newSize.y > _minPixel))
             {
-                Debug.LogWarning($"Selection size exceeded {minpixel}! Requested: {size}, Clamped: {newSize}");
+                Debug.LogWarning($"Selection size exceeded {_minPixel}! Requested: {size}, Clamped: {newSize}");
             }
 #endif
             if (size.x != newSize.x)
@@ -288,7 +293,7 @@ namespace HughGame.UI
         {
             Vector2 localPos;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_viewport, screenPos, cam, out localPos);
-            // ImageHolder가 Viewport 중앙이고 화면 전체 크기이므로 좌표 변환
+
             Vector2 imageHolderPos = localPos + (_viewportSize * 0.5f);
             return imageHolderPos;
         }
@@ -368,23 +373,17 @@ namespace HughGame.UI
         private void SetupImage(Texture2D texture2D)
         {
             OriginalImage.texture = texture2D;
-            _originalImageRect.sizeDelta = ImageHelper.CalculateScaledImageSizeForCropWindow(texture2D);
-
+            _originalImageRect.sizeDelta = ImageHelper.CalculateScaledImageSize(texture2D, Viewport.rect.size);
             _originalImageSize = new Vector2(texture2D.width, texture2D.height);
             _orientedImageSize = _originalImageSize;
-
             _minSize = new Vector2(64f, 64f);
 
             var minPixel = ImageHelper.GetScreenBasedMinPixel();
             _maxSize = new Vector2(minPixel, minPixel);
-
             _currMinSize = _minSize;
             _currMaxSize = _maxSize;
-
-            _selection.sizeDelta = _currMaxSize;
-
+            _selection.sizeDelta = _currMaxSize / 2;
             ResetView(false);
-
             _selection.anchoredPosition = (_imageHolder.sizeDelta - _selection.sizeDelta) * 0.5f;
         }
 
@@ -449,9 +448,9 @@ namespace HughGame.UI
 #endif
 
             Texture2D croppedTexture = ImageHelper.CropTextureDirectly(originalTexture, 
-                                                                       _originalImageRect, 
-                                                                       _selection, 
-                                                                       ImageHelper.GetImageMaxPixel());
+                _originalImageRect, 
+                _selection, 
+                ImageHelper.GetImageMaxPixel());
 
             Debug.Assert(croppedTexture != null, "이미지 Crop 실패함");
 
